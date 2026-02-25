@@ -1,0 +1,21 @@
+# Multi-Language TTS Voice Cloning - Dependencies
+# Python >= 3.10 required
+
+# TTS Engines
+f5-tts-th>=1.0.9
+TTS>=0.22.0
+
+# Web UI
+gradio>=5.0.0
+
+# Audio Processing
+soundfile>=0.13.0
+pydub>=0.25.1
+librosa>=0.10.0
+noisereduce>=3.0.0
+
+# Runtime (PyTorch)
+# NOTE: For CUDA support, install torch separately using:
+#   pip install torch>=2.2 torchaudio --extra-index-url https://download.pytorch.org/whl/cu124
+torch>=2.2
+torchaudio

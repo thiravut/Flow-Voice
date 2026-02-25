@@ -1,0 +1,454 @@
+/* ==========================================================================
+   Multi-Language TTS Voice Cloning — Custom Gradio Styles
+   Targets Gradio >= 5.0 with gr.themes.Soft()
+   Uses Gradio CSS custom properties where available so the stylesheet
+   stays correct if the user switches themes.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Root / global overrides
+   -------------------------------------------------------------------------- */
+
+:root {
+    --tts-radius:        8px;
+    --tts-radius-sm:     4px;
+    --tts-radius-lg:    12px;
+    --tts-gap:          16px;
+    --tts-gap-sm:        8px;
+    --tts-gap-lg:       24px;
+    --tts-transition:   0.18s ease;
+
+    /* Semantic colours (fall back gracefully if Gradio vars are absent) */
+    --tts-accent:        var(--color-accent, #6366f1);
+    --tts-accent-hover:  var(--color-accent-soft, #818cf8);
+    --tts-success:       #22c55e;
+    --tts-warning:       #f59e0b;
+    --tts-error:         #ef4444;
+    --tts-surface:       var(--background-fill-secondary, #f8f8fb);
+    --tts-border:        var(--border-color-primary, #e2e2e8);
+    --tts-text-muted:    var(--body-text-color-subdued, #6b7280);
+}
+
+/* --------------------------------------------------------------------------
+   2. App-level container
+   -------------------------------------------------------------------------- */
+
+/* Give the whole app a gentle max-width so it looks good on large screens */
+.gradio-container {
+    max-width: 1280px !important;
+    margin: 0 auto !important;
+}
+
+/* --------------------------------------------------------------------------
+   3. Top header row  (language selector + engine badge)
+   -------------------------------------------------------------------------- */
+
+/* The row holding the language dropdown and the engine label */
+#lang-engine-row {
+    display: flex;
+    align-items: center;
+    gap: var(--tts-gap);
+    padding: var(--tts-gap-sm) var(--tts-gap);
+    background: var(--tts-surface);
+    border: 1px solid var(--tts-border);
+    border-radius: var(--tts-radius-lg);
+    margin-bottom: var(--tts-gap);
+}
+
+/* --------------------------------------------------------------------------
+   4. Engine display badge
+   -------------------------------------------------------------------------- */
+
+#engine-display,
+.engine-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 14px;
+    border-radius: 9999px;             /* pill shape */
+    background: var(--tts-accent);
+    color: #ffffff;
+    font-size: 0.8125rem;              /* ~13 px */
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    transition: background var(--tts-transition);
+    /* Reset Gradio label defaults */
+    border: none;
+    line-height: 1.4;
+}
+
+/* The text node inside gr.Label rendered as a <div> */
+#engine-display .output-class,
+#engine-display span {
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+}
+
+/* --------------------------------------------------------------------------
+   5. Two-column layout — Reference Voice  |  Generation Settings
+   -------------------------------------------------------------------------- */
+
+/* Wrapper div assigned elem_id="generate-columns" in app_ui.py */
+#generate-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--tts-gap-lg);
+    align-items: start;
+}
+
+/* Stack to a single column below 768 px */
+@media (max-width: 768px) {
+    #generate-columns {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   6. Panel / Group boxes (Reference Voice & Generation Settings)
+   -------------------------------------------------------------------------- */
+
+#ref-voice-panel,
+#gen-settings-panel {
+    background: var(--tts-surface);
+    border: 1px solid var(--tts-border);
+    border-radius: var(--tts-radius-lg);
+    padding: var(--tts-gap);
+}
+
+/* Panel heading — the label rendered by gr.Group or a gr.Markdown heading */
+#ref-voice-panel > .label,
+#gen-settings-panel > .label,
+#ref-voice-panel > .block > .label,
+#gen-settings-panel > .block > .label {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: var(--body-text-color, #111827);
+    margin-bottom: var(--tts-gap-sm);
+    border-bottom: 2px solid var(--tts-accent);
+    padding-bottom: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   7. Audio upload / recorder component
+   -------------------------------------------------------------------------- */
+
+#ref-audio-upload,
+.audio-upload-box {
+    border: 2px dashed var(--tts-border);
+    border-radius: var(--tts-radius);
+    transition: border-color var(--tts-transition);
+}
+
+#ref-audio-upload:hover,
+.audio-upload-box:hover {
+    border-color: var(--tts-accent);
+}
+
+/* --------------------------------------------------------------------------
+   8. Audio info strip  (duration | format | sample-rate)
+   -------------------------------------------------------------------------- */
+
+#audio-info-display,
+.audio-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--tts-gap-sm);
+    padding: 8px 12px;
+    background: var(--background-fill-secondary, #f1f5f9);
+    border: 1px solid var(--tts-border);
+    border-radius: var(--tts-radius-sm);
+    font-size: 0.8125rem;
+    color: var(--tts-text-muted);
+    font-family: var(--font-mono, 'JetBrains Mono', 'Fira Mono', monospace);
+}
+
+/* Individual stat chips */
+#audio-info-display span,
+.audio-info .info-chip {
+    background: var(--background-fill-primary, #ffffff);
+    border: 1px solid var(--tts-border);
+    border-radius: var(--tts-radius-sm);
+    padding: 2px 8px;
+}
+
+/* --------------------------------------------------------------------------
+   9. Status / result message
+   -------------------------------------------------------------------------- */
+
+#status-text,
+.status-message {
+    font-size: 0.875rem;
+    padding: 8px 14px;
+    border-radius: var(--tts-radius);
+    line-height: 1.5;
+    transition: background var(--tts-transition), color var(--tts-transition);
+}
+
+/* Modifier classes applied dynamically from Python */
+#status-text.status-ok,
+.status-message.status-ok {
+    background: #f0fdf4;
+    color: #166534;
+    border-left: 4px solid var(--tts-success);
+}
+
+#status-text.status-error,
+.status-message.status-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border-left: 4px solid var(--tts-error);
+}
+
+#status-text.status-info,
+.status-message.status-info {
+    background: #eff6ff;
+    color: #1e40af;
+    border-left: 4px solid var(--tts-accent);
+}
+
+/* --------------------------------------------------------------------------
+   10. Generate button — make it prominent
+   -------------------------------------------------------------------------- */
+
+#generate-btn,
+#generate-btn button {
+    width: 100% !important;
+    min-height: 52px !important;
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.03em !important;
+    border-radius: var(--tts-radius) !important;
+    background: var(--tts-accent) !important;
+    color: #ffffff !important;
+    border: none !important;
+    box-shadow: 0 4px 14px 0 rgba(99, 102, 241, 0.35) !important;
+    transition:
+        background var(--tts-transition),
+        box-shadow var(--tts-transition),
+        transform var(--tts-transition) !important;
+    cursor: pointer !important;
+}
+
+#generate-btn:hover button,
+#generate-btn button:hover {
+    background: var(--tts-accent-hover) !important;
+    box-shadow: 0 6px 20px 0 rgba(99, 102, 241, 0.45) !important;
+    transform: translateY(-1px) !important;
+}
+
+#generate-btn:active button,
+#generate-btn button:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 8px 0 rgba(99, 102, 241, 0.35) !important;
+}
+
+/* Disabled / loading state */
+#generate-btn button:disabled {
+    background: var(--neutral-400, #9ca3af) !important;
+    box-shadow: none !important;
+    transform: none !important;
+    cursor: not-allowed !important;
+}
+
+/* --------------------------------------------------------------------------
+   11. Output audio player
+   -------------------------------------------------------------------------- */
+
+#output-audio audio {
+    width: 100%;
+    border-radius: var(--tts-radius);
+}
+
+/* --------------------------------------------------------------------------
+   12. Sliders — F5-TTS parameter group
+   -------------------------------------------------------------------------- */
+
+#f5-params-group {
+    padding: var(--tts-gap-sm) 0;
+}
+
+/* Tighten vertical spacing between sliders */
+#f5-params-group .gradio-slider,
+#f5-params-group .block {
+    margin-bottom: var(--tts-gap-sm) !important;
+}
+
+/* Slider track accent */
+#f5-params-group input[type="range"]::-webkit-slider-thumb {
+    background: var(--tts-accent);
+}
+#f5-params-group input[type="range"]::-moz-range-thumb {
+    background: var(--tts-accent);
+}
+
+/* --------------------------------------------------------------------------
+   13. Tab navigation
+   -------------------------------------------------------------------------- */
+
+/* Active tab indicator */
+.tabs > .tab-nav button.selected {
+    border-bottom: 3px solid var(--tts-accent) !important;
+    color: var(--tts-accent) !important;
+    font-weight: 600 !important;
+}
+
+/* Tab hover */
+.tabs > .tab-nav button:not(.selected):hover {
+    color: var(--tts-accent-hover) !important;
+    background: var(--background-fill-secondary, #f8f8fb) !important;
+}
+
+/* --------------------------------------------------------------------------
+   14. Emotion Presets tab
+   -------------------------------------------------------------------------- */
+
+#emotion-table {
+    border-radius: var(--tts-radius);
+    overflow: hidden;
+}
+
+/* Header row */
+#emotion-table table thead th {
+    background: var(--tts-surface);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--tts-text-muted);
+}
+
+/* Row hover */
+#emotion-table table tbody tr:hover {
+    background: color-mix(in srgb, var(--tts-accent) 6%, transparent);
+}
+
+/* Add preset form area */
+#add-emotion-group {
+    background: var(--tts-surface);
+    border: 1px solid var(--tts-border);
+    border-radius: var(--tts-radius-lg);
+    padding: var(--tts-gap);
+    margin-top: var(--tts-gap);
+}
+
+/* --------------------------------------------------------------------------
+   15. History tab
+   -------------------------------------------------------------------------- */
+
+#history-table {
+    border-radius: var(--tts-radius);
+    overflow: hidden;
+}
+
+#history-table table thead th {
+    background: var(--tts-surface);
+    font-weight: 600;
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--tts-text-muted);
+}
+
+#history-table table tbody tr:hover {
+    background: color-mix(in srgb, var(--tts-accent) 6%, transparent);
+}
+
+/* Language column pill in history */
+.lang-pill {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 9999px;
+    background: color-mix(in srgb, var(--tts-accent) 15%, transparent);
+    color: var(--tts-accent);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   16. Reference mode radio buttons
+   -------------------------------------------------------------------------- */
+
+#ref-mode-radio .wrap {
+    gap: var(--tts-gap-sm);
+}
+
+#ref-mode-radio .wrap label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border: 1px solid var(--tts-border);
+    border-radius: var(--tts-radius);
+    cursor: pointer;
+    transition:
+        border-color var(--tts-transition),
+        background var(--tts-transition);
+    font-size: 0.875rem;
+}
+
+#ref-mode-radio .wrap label:has(input:checked) {
+    border-color: var(--tts-accent);
+    background: color-mix(in srgb, var(--tts-accent) 10%, transparent);
+    font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   17. Noise reduction checkbox
+   -------------------------------------------------------------------------- */
+
+#noise-reduce-check label {
+    font-size: 0.875rem;
+    color: var(--body-text-color, #111827);
+}
+
+/* --------------------------------------------------------------------------
+   18. Ref text textarea
+   -------------------------------------------------------------------------- */
+
+#ref-text-input textarea {
+    font-size: 0.875rem;
+    line-height: 1.6;
+    border-radius: var(--tts-radius);
+    transition: border-color var(--tts-transition);
+}
+
+#ref-text-input textarea:focus {
+    border-color: var(--tts-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--tts-accent) 20%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   19. Text-to-generate textarea
+   -------------------------------------------------------------------------- */
+
+#text-input textarea {
+    min-height: 100px;
+    font-size: 0.9375rem;
+    line-height: 1.7;
+    border-radius: var(--tts-radius);
+    transition: border-color var(--tts-transition);
+}
+
+#text-input textarea:focus {
+    border-color: var(--tts-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--tts-accent) 20%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   20. Responsive adjustments
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+    #lang-engine-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    #generate-btn,
+    #generate-btn button {
+        min-height: 48px !important;
+        font-size: 0.9375rem !important;
+    }
+}

@@ -1,0 +1,58 @@
+{
+  "presets": [
+    {
+      "id": "neutral",
+      "name_en": "Neutral",
+      "name_th": "ปกติ",
+      "description": "น้ำเสียงปกติ สมดุล",
+      "ref_text": "",
+      "audio_file": null,
+      "is_default": true
+    },
+    {
+      "id": "happy",
+      "name_en": "Happy",
+      "name_th": "มีความสุข",
+      "description": "สดใส ร่าเริง",
+      "ref_text": "",
+      "audio_file": null,
+      "is_default": true
+    },
+    {
+      "id": "sad",
+      "name_en": "Sad",
+      "name_th": "เศร้า",
+      "description": "เบาเศร้า อ่อนโยน",
+      "ref_text": "",
+      "audio_file": null,
+      "is_default": true
+    },
+    {
+      "id": "angry",
+      "name_en": "Angry",
+      "name_th": "โกรธ",
+      "description": "หนักแน่น รุนแรง",
+      "ref_text": "",
+      "audio_file": null,
+      "is_default": true
+    },
+    {
+      "id": "excited",
+      "name_en": "Excited",
+      "name_th": "ตื่นเต้น",
+      "description": "พลังสูง กระตือรือร้น",
+      "ref_text": "",
+      "audio_file": null,
+      "is_default": true
+    },
+    {
+      "id": "calm",
+      "name_en": "Calm",
+      "name_th": "สงบ",
+      "description": "ช้า สงบ ผ่อนคลาย",
+      "ref_text": "",
+      "audio_file": null,
+      "is_default": true
+    }
+  ]
+}
