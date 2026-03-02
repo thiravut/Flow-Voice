@@ -223,6 +223,43 @@ def _hard_cut(text: str, max_chars: int) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Silence trimming
+# ---------------------------------------------------------------------------
+
+
+def trim_leading_silence(
+    audio_path: str,
+    threshold_db: float = -40.0,
+    margin_ms: int = 50,
+) -> str:
+    """Trim silence from the beginning of an audio file (in-place).
+
+    Args:
+        audio_path: Path to the WAV file.
+        threshold_db: Silence threshold in dB (default -40 dB).
+        margin_ms: Keep this many milliseconds before the first sound.
+
+    Returns:
+        The same audio_path (modified in-place).
+    """
+    audio, sr = librosa.load(audio_path, sr=None, mono=True)
+
+    # Find where audio exceeds threshold
+    _, index = librosa.effects.trim(audio, top_db=abs(threshold_db))
+    start_sample = index[0]
+
+    # Keep a small margin before the first sound
+    margin_samples = int(sr * margin_ms / 1000)
+    start_sample = max(0, start_sample - margin_samples)
+
+    if start_sample > 0:
+        audio = audio[start_sample:]
+        sf.write(audio_path, audio, sr, subtype="PCM_16")
+
+    return audio_path
+
+
+# ---------------------------------------------------------------------------
 # Noise reduction
 # ---------------------------------------------------------------------------
 

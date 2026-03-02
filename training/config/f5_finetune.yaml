@@ -1,0 +1,29 @@
+# F5-TTS-TH-V2 Fine-tuning Configuration
+# Target: RunPod RTX 4090 (24GB VRAM)
+
+# Model
+pretrained_checkpoint: null  # null = auto-detect from f5_tts_th package
+use_ema: false               # disable for early fine-tuning checkpoints
+
+# Data
+dataset_path: "/workspace/training_data/f5"
+vocab_file: "/workspace/training_data/f5/vocab.txt"
+
+# Training (RTX 4090 24GB)
+learning_rate: 1.0e-5
+batch_size_per_gpu: 3840     # frame mode — 24GB handles ~3x vs 8GB
+max_samples: 32              # max sequences per GPU batch
+epochs: 100
+num_warmup_updates: 100
+grad_accumulation_steps: 1
+max_grad_norm: 1.0
+mixed_precision: "bf16"
+
+# Checkpointing
+save_per_updates: 500
+output_dir: "/workspace/checkpoints/f5"
+
+# Logging
+wandb_project: "f5-tts-thai-finetune"
+wandb_mode: "offline"        # "online" if wandb configured
+log_interval: 50             # print loss every N steps

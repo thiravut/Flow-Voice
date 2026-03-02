@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+tts_env/
+venv/
+.venv/
+env/
+
+# Generated Audio & Uploads
+history/
+uploads/
+
+# Models (large files)
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+
+# Tokens & Secrets
+*.mg
+.env
+.env.*
+huggingface_token*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Claude Code (local settings only)
+.claude/settings.local.json
+
+apps/tts_env
+training_data
+dataset
+checkpoints
+wandb/

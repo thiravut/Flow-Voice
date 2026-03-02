@@ -12,7 +12,7 @@ import logging
 import threading
 from typing import Any
 
-from config import ENGINE_NAMES, LANGUAGE_ENGINE_MAP
+from config import ENGINE_NAMES, F5_CUSTOM_CHECKPOINT, LANGUAGE_ENGINE_MAP
 from engine.coqui_engine import CoquiEngine
 from engine.f5_engine import F5Engine
 
@@ -57,7 +57,7 @@ class EngineRouter:
     def __init__(self) -> None:
         # Instantiate engine objects (no model loaded yet — lazy init).
         self._engines: dict[str, F5Engine | CoquiEngine] = {
-            "f5": F5Engine(),
+            "f5": F5Engine(custom_checkpoint=F5_CUSTOM_CHECKPOINT),
             "coqui": CoquiEngine(),
         }
         self._current_engine_key: str | None = None

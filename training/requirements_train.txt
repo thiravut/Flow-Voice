@@ -1,0 +1,7 @@
+pyarrow
+accelerate
+wandb
+datasets
+soundfile
+pydub
+tqdm

@@ -3,6 +3,7 @@ f5_engine.py -- F5-TTS-TH-V2 wrapper for Thai language synthesis.
 
 Uses f5_tts_th.tts.TTS which handles chunking internally.
 Patches torchaudio.load to use soundfile backend (avoids torchcodec issues on Windows).
+Patches th_to_g2p to improve Thai word segmentation (reduces unnatural pauses).
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from config import (
     OUTPUT_SAMPLE_RATE,
     SPEED,
 )
-from engine.audio_processor import apply_noise_reduction
+from engine.audio_processor import apply_noise_reduction, trim_leading_silence
 from engine.base_engine import BaseTTSEngine
 
 logger = logging.getLogger(__name__)
@@ -53,13 +54,57 @@ def _patched_torchaudio_load(filepath, *args, **kwargs):
 
 torchaudio.load = _patched_torchaudio_load
 
+# ---------------------------------------------------------------------------
+# Patch th_to_g2p to improve Thai word segmentation.
+# The default pythainlp dictionary is missing some compound words (e.g.
+# "กระเพรา"), causing them to be split into sub-words.  Each word boundary
+# becomes a space in IPA that the model interprets as a pause, resulting in
+# unnatural word spacing.  We enhance the dictionary with missing compounds.
+# ---------------------------------------------------------------------------
+_EXTRA_THAI_WORDS = {
+    # กระ- prefix compounds missing from pythainlp dict
+    "กระเพรา", "กะเพรา",
+}
+
+
+def _patch_th_to_g2p() -> None:
+    """Monkey-patch f5_tts_th.utils_infer.th_to_g2p with improved tokeniser."""
+    try:
+        from pythainlp.corpus import thai_words
+        from pythainlp.tokenize import Tokenizer
+
+        from f5_tts_th import utils_infer
+        from f5_tts_th.THG2P import g2p
+        from f5_tts_th.normalize import normalize_text
+
+        merged_dict = thai_words() | _EXTRA_THAI_WORDS
+        _custom_tok = Tokenizer(custom_dict=merged_dict, engine="newmm")
+
+        def _improved_th_to_g2p(text: str) -> str:
+            text = normalize_text(text)
+            words = _custom_tok.word_tokenize(text)
+            ipa = g2p(words, "ipa")
+            if ipa.endswith("."):
+                return ipa.replace("  ", " ")
+            return ipa.replace("  ", " ") + "."
+
+        utils_infer.th_to_g2p = _improved_th_to_g2p
+        logger.info("F5Engine: patched th_to_g2p with improved tokeniser (%d extra words).",
+                     len(_EXTRA_THAI_WORDS))
+    except Exception as exc:
+        logger.warning("F5Engine: could not patch th_to_g2p (using default): %s", exc)
+
+
+_patch_th_to_g2p()
+
 
 class F5Engine(BaseTTSEngine):
     """TTS engine backed by F5-TTS-TH-V2 for Thai language synthesis."""
 
-    def __init__(self, model_version: str = "v2") -> None:
+    def __init__(self, model_version: str = "v2", custom_checkpoint: str | None = None) -> None:
         super().__init__()
         self._model_version = model_version
+        self._custom_checkpoint = custom_checkpoint
 
     # ------------------------------------------------------------------
     # Model lifecycle
@@ -73,9 +118,11 @@ class F5Engine(BaseTTSEngine):
 
         logger.info("F5Engine: loading F5-TTS-TH-%s model...", self._model_version)
         try:
-            from f5_tts_th.tts import TTS
+            if self._custom_checkpoint:
+                self._load_finetuned()
+            else:
+                self._load_pretrained()
 
-            self._model = TTS(model=self._model_version)
             self._loaded = True
             logger.info("F5Engine: model loaded successfully.")
         except ImportError as exc:
@@ -88,6 +135,58 @@ class F5Engine(BaseTTSEngine):
             self._loaded = False
             logger.error("F5Engine: failed to load model: %s", exc, exc_info=True)
             raise RuntimeError(f"Failed to load F5-TTS-TH model: {exc}") from exc
+
+    def _load_pretrained(self) -> None:
+        """Load the standard pretrained model."""
+        from f5_tts_th.tts import TTS
+        self._model = TTS(model=self._model_version)
+
+    def _load_finetuned(self) -> None:
+        """Load a fine-tuned checkpoint while reusing the TTS wrapper."""
+        from f5_tts_th.tts import TTS
+        from f5_tts_th.utils_infer import load_model, load_vocoder
+
+        logger.info("F5Engine: loading fine-tuned checkpoint: %s", self._custom_checkpoint)
+
+        # Find vocab.txt next to the checkpoint, or in training_data/f5/
+        ckpt_dir = os.path.dirname(os.path.abspath(self._custom_checkpoint))
+        # project root = apps/../ = voice/
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        vocab_candidates = [
+            os.path.join(ckpt_dir, "vocab.txt"),
+            os.path.join(project_root, "training_data", "f5", "vocab.txt"),
+        ]
+        vocab_path = None
+        for v in vocab_candidates:
+            if os.path.isfile(v):
+                vocab_path = v
+                break
+
+        if vocab_path is None:
+            raise FileNotFoundError(
+                f"vocab.txt not found. Looked in: {vocab_candidates}"
+            )
+
+        model_cfg = dict(
+            dim=1024, depth=22, heads=16, ff_mult=2,
+            text_dim=512, text_mask_padding=True,
+            conv_layers=4, pe_attn_head=None,
+        )
+        f5_model = load_model(
+            model_cfg,
+            self._custom_checkpoint,
+            mel_spec_type="vocos",
+            vocab_file=vocab_path,
+        )
+
+        # Create a TTS wrapper and replace its model
+        tts = TTS.__new__(TTS)
+        tts.model_type = self._model_version
+        tts.vocoder_name = "vocos"
+        tts.hf_cache_dir = None
+        tts.f5_model = f5_model
+        tts.vocoder = load_vocoder("vocos")
+        self._model = tts
 
     def unload_model(self) -> None:
         """Delete the model and free GPU memory."""
@@ -159,6 +258,12 @@ class F5Engine(BaseTTSEngine):
         # Post-processing outside lock
         audio_array = np.array(wav, dtype=np.float32) if not isinstance(wav, np.ndarray) else wav
         output_path = self._save_to_history(audio_array, OUTPUT_SAMPLE_RATE)
+
+        # Trim variable leading silence for consistent playback
+        try:
+            trim_leading_silence(output_path)
+        except Exception as exc:
+            logger.warning("F5Engine: trim silence failed (skipped): %s", exc)
 
         if use_noise_reduction:
             try:
