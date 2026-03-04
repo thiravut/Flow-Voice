@@ -29,9 +29,9 @@ echo "  Done."
 echo ""
 echo "[2/5] Installing Python dependencies..."
 cd "$REPO_DIR"
-pip install -q -r training/requirements_train.txt
-pip install -q f5-tts-th>=1.0.9 TTS>=0.22.0
-pip install -q pyyaml librosa noisereduce
+pip install -q --ignore-installed -r training/requirements_train.txt
+pip install -q --ignore-installed f5-tts-th>=1.0.9 TTS>=0.22.0
+pip install -q --ignore-installed pyyaml librosa noisereduce
 echo "  Done."
 
 # 3. HuggingFace login (if token provided)
@@ -46,19 +46,22 @@ else
     echo "[3/5] Skipping HuggingFace login (no --hf-token provided)"
 fi
 
-# 4. Download Porjai dataset
-if [ -d "$DATASET_DIR" ] && [ "$(ls -A $DATASET_DIR 2>/dev/null)" ]; then
+# 4. Download Porjai dataset (as parquet files)
+if [ -d "$DATASET_DIR" ] && find "$DATASET_DIR" -name "*.parquet" | head -1 | grep -q .; then
     echo ""
     echo "[4/5] Dataset already exists at $DATASET_DIR, skipping download."
 else
     echo ""
     echo "[4/5] Downloading Porjai dataset from HuggingFace..."
     python -c "
-from datasets import load_dataset
+from huggingface_hub import snapshot_download
 print('  Downloading CMKL/Porjai-Thai-voice-dataset-central...')
-ds = load_dataset('CMKL/Porjai-Thai-voice-dataset-central', split='train')
-ds.save_to_disk('$DATASET_DIR')
-print('  Saved to $DATASET_DIR')
+path = snapshot_download(
+    repo_id='CMKL/Porjai-Thai-voice-dataset-central',
+    repo_type='dataset',
+    local_dir='$DATASET_DIR',
+)
+print(f'  Saved to {path}')
 "
 fi
 
@@ -76,12 +79,12 @@ echo "=== Setup Complete ==="
 echo ""
 echo "Next steps:"
 echo "  1. Prepare F5 dataset:"
-echo "     python training/prepare_f5_dataset.py --input $DATASET_DIR --output $WORKSPACE/training_data/f5/"
+echo "     python training/prepare_f5_dataset.py --input $DATASET_DIR/data --output $WORKSPACE/training_data/f5/"
 echo ""
 echo "  2. Prepare XTTS dataset:"
-echo "     python training/prepare_xtts_dataset.py --input $DATASET_DIR --output $WORKSPACE/training_data/xtts/"
+echo "     python training/prepare_xtts_dataset.py --input $DATASET_DIR/data --output $WORKSPACE/training_data/xtts/"
 echo ""
-echo "  3. Start F5 training:"
+echo "  3. Start F5 training (use --no-mel-cache to save disk space):"
 echo "     python training/train_f5.py --config training/config/f5_finetune.yaml"
 echo ""
 echo "  4. Start XTTS training:"

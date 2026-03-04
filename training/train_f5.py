@@ -10,6 +10,12 @@ Usage:
 
     # Short test run
     python training/train_f5.py --config training/config/f5_finetune.yaml --max-steps 10
+
+    # Save disk space (no mel cache, ~150GB+ smaller)
+    python training/train_f5.py --config training/config/f5_finetune.yaml --no-mel-cache
+
+    # Delete existing mel cache to free disk, then train without it
+    python training/train_f5.py --config training/config/f5_finetune.yaml --delete-mel-cache --no-mel-cache
 """
 
 import argparse
@@ -428,6 +434,23 @@ def find_latest_checkpoint(output_dir: str) -> str | None:
     return os.path.join(output_dir, ckpts[-1])
 
 
+def cleanup_old_checkpoints(output_dir: str, keep: int) -> None:
+    """Keep only the last `keep` checkpoints, delete older ones."""
+    if keep <= 0:
+        return
+    if not os.path.isdir(output_dir):
+        return
+    ckpts = sorted(
+        [f for f in os.listdir(output_dir) if f.startswith("model_") and f.endswith(".pt")]
+    )
+    if len(ckpts) <= keep:
+        return
+    for old_ckpt in ckpts[:-keep]:
+        old_path = os.path.join(output_dir, old_ckpt)
+        os.remove(old_path)
+        logger.info(f"Removed old checkpoint: {old_path}")
+
+
 # ---------------------------------------------------------------------------
 # Learning rate scheduler (linear warmup + cosine decay)
 # ---------------------------------------------------------------------------
@@ -448,7 +471,14 @@ def get_lr_scheduler(optimizer, num_warmup_steps: int, total_steps: int):
 # Training
 # ---------------------------------------------------------------------------
 
-def train(cfg: dict, max_steps: int | None = None, resume: bool = False) -> None:
+def train(
+    cfg: dict,
+    max_steps: int | None = None,
+    resume: bool = False,
+    no_mel_cache: bool = False,
+    delete_mel_cache: bool = False,
+    keep_checkpoints: int = 3,
+) -> None:
     """Main training function."""
     # --- Accelerate setup ---
     try:
@@ -519,9 +549,23 @@ def train(cfg: dict, max_steps: int | None = None, resume: bool = False) -> None
     # CFM stores its MelSpectrogram as self.mel_spec
     mel_spectrogram = model.mel_spec.to("cpu")
 
+    # --- Delete mel cache if requested ---
+    if delete_mel_cache:
+        import shutil
+        mels_cache_dir = os.path.join(dataset_path, "mels_cache")
+        if os.path.isdir(mels_cache_dir):
+            if is_main:
+                logger.info(f"Deleting mel cache: {mels_cache_dir}")
+            shutil.rmtree(mels_cache_dir)
+            if is_main:
+                logger.info("Mel cache deleted.")
+
     # --- Dataset & DataLoader ---
-    # Pass mel_spectrogram to dataset for one-time mel caching to disk
-    dataset = F5FinetuneDataset(dataset_path, mel_spectrogram=mel_spectrogram)
+    # Pass mel_spectrogram to dataset for one-time mel caching to disk (unless --no-mel-cache)
+    cache_mel_spec = None if no_mel_cache else mel_spectrogram
+    if no_mel_cache and is_main:
+        logger.info("Mel caching disabled — computing on-the-fly (slower but saves ~150GB+ disk)")
+    dataset = F5FinetuneDataset(dataset_path, mel_spectrogram=cache_mel_spec)
     dataloader = build_dataloader(
         dataset=dataset,
         batch_size_per_gpu=cfg["batch_size_per_gpu"],
@@ -597,6 +641,7 @@ def train(cfg: dict, max_steps: int | None = None, resume: bool = False) -> None
     save_per_updates = cfg.get("save_per_updates", 500)
     max_grad_norm = cfg.get("max_grad_norm", 1.0)
     grad_accumulation_steps = cfg.get("grad_accumulation_steps", 2)
+    log_interval = cfg.get("log_interval", 1)
 
     model.train()
 
@@ -653,12 +698,13 @@ def train(cfg: dict, max_steps: int | None = None, resume: bool = False) -> None
 
                 if is_main:
                     lr_current = scheduler.get_last_lr()[0] if hasattr(scheduler, "get_last_lr") else cfg["learning_rate"]
-                    logger.info(
-                        f"Epoch {epoch + 1}/{total_epochs} | "
-                        f"Step {global_step} | "
-                        f"Loss {loss_val:.4f} | "
-                        f"LR {lr_current:.2e}"
-                    )
+                    if global_step % log_interval == 0 or global_step == 1:
+                        logger.info(
+                            f"Epoch {epoch + 1}/{total_epochs} | "
+                            f"Step {global_step} | "
+                            f"Loss {loss_val:.4f} | "
+                            f"LR {lr_current:.2e}"
+                        )
 
                     if wandb_run:
                         try:
@@ -681,6 +727,7 @@ def train(cfg: dict, max_steps: int | None = None, resume: bool = False) -> None
                         scheduler=scheduler,
                         epoch=epoch,
                     )
+                    cleanup_old_checkpoints(output_dir, keep_checkpoints)
 
                 # --- Max steps early stop ---
                 if max_steps and global_step >= max_steps:
@@ -759,6 +806,27 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Resume training from the latest checkpoint in output_dir.",
     )
+    parser.add_argument(
+        "--no-mel-cache",
+        action="store_true",
+        default=False,
+        dest="no_mel_cache",
+        help="Compute mel spectrograms on-the-fly instead of caching to disk. Saves ~150GB+ disk space.",
+    )
+    parser.add_argument(
+        "--delete-mel-cache",
+        action="store_true",
+        default=False,
+        dest="delete_mel_cache",
+        help="Delete existing mels_cache/ directory before training to free disk space.",
+    )
+    parser.add_argument(
+        "--keep-checkpoints",
+        type=int,
+        default=3,
+        dest="keep_checkpoints",
+        help="Keep only the last N checkpoints to save disk space (0 = keep all).",
+    )
     return parser.parse_args()
 
 
@@ -781,7 +849,14 @@ def main() -> None:
     config_path = os.path.abspath(args.config)
     cfg = load_config(config_path)
 
-    train(cfg, max_steps=args.max_steps, resume=args.resume)
+    train(
+        cfg,
+        max_steps=args.max_steps,
+        resume=args.resume,
+        no_mel_cache=args.no_mel_cache,
+        delete_mel_cache=args.delete_mel_cache,
+        keep_checkpoints=args.keep_checkpoints,
+    )
 
 
 if __name__ == "__main__":
