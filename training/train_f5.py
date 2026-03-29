@@ -26,6 +26,7 @@ import math
 import os
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -623,17 +624,36 @@ def train(
         resume_ckpt = find_latest_checkpoint(output_dir)
         if resume_ckpt and is_main:
             logger.info(f"Resuming from checkpoint: {resume_ckpt}")
-            ckpt = torch.load(resume_ckpt, map_location="cpu", weights_only=False)
-            global_step = ckpt.get("global_step", 0)
-            start_epoch = ckpt.get("epoch", 0)
-            if "optimizer_state_dict" in ckpt:
-                optimizer.load_state_dict(ckpt["optimizer_state_dict"])
-            if "scheduler_state_dict" in ckpt:
-                scheduler.load_state_dict(ckpt["scheduler_state_dict"])
-            del ckpt
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            logger.info(f"Resumed: epoch={start_epoch}, global_step={global_step}")
+            try:
+                ckpt = torch.load(resume_ckpt, map_location="cpu", weights_only=False)
+                global_step = ckpt.get("global_step", 0)
+                start_epoch = ckpt.get("epoch", 0)
+                if "optimizer_state_dict" in ckpt:
+                    optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+                if "scheduler_state_dict" in ckpt:
+                    scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+                del ckpt
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                logger.info(f"Resumed: epoch={start_epoch}, global_step={global_step}")
+            except (RuntimeError, EOFError, zipfile.BadZipFile) as exc:
+                logger.warning(f"Checkpoint is corrupted, removing it: {resume_ckpt} ({exc})")
+                os.remove(resume_ckpt)
+                # Try the next most recent checkpoint
+                resume_ckpt = find_latest_checkpoint(output_dir)
+                if resume_ckpt:
+                    logger.info(f"Falling back to: {resume_ckpt}")
+                    ckpt = torch.load(resume_ckpt, map_location="cpu", weights_only=False)
+                    global_step = ckpt.get("global_step", 0)
+                    start_epoch = ckpt.get("epoch", 0)
+                    if "optimizer_state_dict" in ckpt:
+                        optimizer.load_state_dict(ckpt["optimizer_state_dict"])
+                    if "scheduler_state_dict" in ckpt:
+                        scheduler.load_state_dict(ckpt["scheduler_state_dict"])
+                    del ckpt
+                    logger.info(f"Resumed: epoch={start_epoch}, global_step={global_step}")
+                else:
+                    logger.info("No valid checkpoint found, starting from scratch.")
         elif is_main:
             logger.info("No checkpoint found in output_dir, starting from scratch.")
 
@@ -644,11 +664,13 @@ def train(
     log_interval = cfg.get("log_interval", 1)
 
     model.train()
+    current_epoch = start_epoch
 
     if is_main:
         logger.info(f"Starting training: {total_epochs} epochs, {steps_per_epoch} steps/epoch")
 
     for epoch in range(start_epoch, total_epochs):
+        current_epoch = epoch
         epoch_loss_sum = 0.0
         epoch_batches = 0
         epoch_start = time.time()
@@ -767,7 +789,7 @@ def train(
             global_step,
             optimizer=optimizer,
             scheduler=scheduler,
-            epoch=total_epochs,
+            epoch=current_epoch,
         )
         logger.info("Training complete.")
 

@@ -95,7 +95,7 @@ F5_MODEL_VERSION: str = "v2"
 # Set to a checkpoint path to use a fine-tuned F5 model instead of pretrained.
 # Example: F5_CUSTOM_CHECKPOINT = "../checkpoints/f5/model_0013500.pt"
 # Set to None to use the default pretrained model.
-F5_CUSTOM_CHECKPOINT: str | None = None  # None = use pretrained V2
+F5_CUSTOM_CHECKPOINT: str | None = str(BASE_DIR.parent / "checkpoints" / "f5" / "model_0427000.pt")
 XTTS_MODEL_NAME: str = "tts_models/multilingual/multi-dataset/xtts_v2"
 
 # ---------------------------------------------------------------------------
